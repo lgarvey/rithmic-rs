@@ -4,7 +4,7 @@ use tokio::time::{Instant, Interval, interval_at, sleep, timeout};
 use tracing::{Level, event};
 
 use tokio_tungstenite::{
-    MaybeTlsStream, WebSocketStream, connect_async,
+    MaybeTlsStream, WebSocketStream, connect_async_with_config,
     tungstenite::{Error, Message},
 };
 
@@ -49,7 +49,12 @@ pub async fn connect_with_retry(
     loop {
         attempt += 1;
 
-        match timeout(Duration::from_secs(2), connect_async(url)).await {
+        match timeout(
+            Duration::from_secs(2),
+            connect_async_with_config(url, None, true),
+        )
+        .await
+        {
             Ok(Ok((ws_stream, _))) => {
                 return Ok(ws_stream);
             }
