@@ -51,12 +51,11 @@ To use this crate, pass in your account information to one of the plants. Doing 
 ```rust
 pub async fn stream_live_ticks(
     &self,
-    env: &RithmicConnectionSystem,
     account_info: &AccountInfo
 ) -> Result<(), Box<dyn std::error::Error>> {
     event!(Level::INFO, "market-data streaming ticks");
 
-    let ticker_plant = RithmicTickerPlant::new(env, account_info).await;
+    let ticker_plant = RithmicTickerPlant::new(account_info).await;
     let ticker_plant_handle = ticker_plant.get_handle();
 
     let mut min_backoff_wait = 1;
@@ -75,7 +74,7 @@ pub async fn stream_live_ticks(
         }
     }
 
-    handle.subscribe("ESM5", "CME").await?;
+    handle.subscribe("ESU5", "CME").await?;
 
     loop {
         let message = ticker_plant_handle.subscription_receiver.recv().await;
