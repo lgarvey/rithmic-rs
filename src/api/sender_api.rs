@@ -3,14 +3,15 @@ use prost::Message;
 use crate::{
     connection_info::{AccountInfo, RithmicConnectionSystem},
     rti::{
-        RequestAccountList, RequestBracketOrder, RequestCancelOrder, RequestExitPosition,
-        RequestHeartbeat, RequestLogin, RequestLogout, RequestMarketDataUpdate, RequestModifyOrder,
-        RequestNewOrder, RequestPnLPositionSnapshot, RequestPnLPositionUpdates,
-        RequestRithmicSystemInfo, RequestShowBracketStops, RequestShowBrackets, RequestShowOrders,
+        RequestAccountList, RequestBracketOrder, RequestCancelOrder, RequestDepthByOrderSnapshot,
+        RequestDepthByOrderUpdates, RequestExitPosition, RequestHeartbeat, RequestLogin,
+        RequestLogout, RequestMarketDataUpdate, RequestModifyOrder, RequestNewOrder,
+        RequestPnLPositionSnapshot, RequestPnLPositionUpdates, RequestRithmicSystemInfo,
+        RequestShowBracketStops, RequestShowBrackets, RequestShowOrders,
         RequestSubscribeForOrderUpdates, RequestSubscribeToBracketUpdates, RequestTickBarReplay,
         RequestUpdateStopBracketLevel, RequestUpdateTargetBracketLevel,
         request_account_list::UserType,
-        request_bracket_order,
+        request_bracket_order, request_depth_by_order_updates,
         request_login::SysInfraType,
         request_market_data_update::{Request, UpdateBits},
         request_new_order, request_pn_l_position_updates,
@@ -505,6 +506,44 @@ impl RithmicSenderApi {
             time_order: Some(TimeOrder::Forwards.into()),
             user_msg: vec![id.clone()],
             ..Default::default()
+        };
+
+        self.request_to_buf(req, id)
+    }
+
+    pub fn request_depth_by_order_snapshot(
+        &mut self,
+        symbol: &str,
+        exchange: &str,
+    ) -> (Vec<u8>, String) {
+        let id = self.get_next_message_id();
+
+        let req = RequestDepthByOrderSnapshot {
+            template_id: 115,
+            user_msg: vec![id.clone()],
+            symbol: Some(symbol.into()),
+            exchange: Some(exchange.into()),
+            depth_price: None,
+        };
+
+        self.request_to_buf(req, id)
+    }
+
+    pub fn request_depth_by_order_update(
+        &mut self,
+        symbol: &str,
+        exchange: &str,
+        request_type: request_depth_by_order_updates::Request,
+    ) -> (Vec<u8>, String) {
+        let id = self.get_next_message_id();
+
+        let req = RequestDepthByOrderUpdates {
+            template_id: 117,
+            user_msg: vec![id.clone()],
+            request: Some(request_type.into()),
+            symbol: Some(symbol.into()),
+            exchange: Some(exchange.into()),
+            depth_price: None,
         };
 
         self.request_to_buf(req, id)

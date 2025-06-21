@@ -477,14 +477,10 @@ impl RithmicPnlPlantHandle {
 
         let response = rx.await;
 
-        if let Ok(r) = response {
-            if let Ok(mut v) = r {
-                Ok(v.remove(0))
-            } else {
-                Err("error".to_string())
-            }
+        if let Ok(Ok(mut v)) = response {
+            Ok(v.remove(0))
         } else {
-            Err("error".to_string())
+            Err("error with pnl position snapshot payload".to_string())
         }
     }
 }

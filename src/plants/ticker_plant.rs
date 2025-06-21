@@ -9,6 +9,7 @@ use crate::{
     connection_info::{self, AccountInfo},
     request_handler::{RithmicRequest, RithmicRequestHandler},
     rti::{
+        request_depth_by_order_updates,
         request_login::SysInfraType,
         request_market_data_update::{Request, UpdateBits},
     },
@@ -49,6 +50,17 @@ pub enum TickerPlantCommand {
         exchange: String,
         fields: Vec<UpdateBits>,
         request_type: Request,
+        response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
+    },
+    SubscribeOrderBook {
+        symbol: String,
+        exchange: String,
+        request_type: request_depth_by_order_updates::Request,
+        response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
+    },
+    RequestDepthByOrderSnapshot {
+        symbol: String,
+        exchange: String,
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
 }
@@ -373,6 +385,47 @@ impl PlantActor for TickerPlant {
                     .await
                     .unwrap();
             }
+            TickerPlantCommand::SubscribeOrderBook {
+                symbol,
+                exchange,
+                request_type,
+                response_sender,
+            } => {
+                let (sub_buf, id) = self.rithmic_sender_api.request_depth_by_order_update(
+                    &symbol,
+                    &exchange,
+                    request_type,
+                );
+
+                self.request_handler.register_request(RithmicRequest {
+                    request_id: id,
+                    responder: response_sender,
+                });
+
+                self.rithmic_sender
+                    .send(Message::Binary(sub_buf.into()))
+                    .await
+                    .unwrap();
+            }
+            TickerPlantCommand::RequestDepthByOrderSnapshot {
+                symbol,
+                exchange,
+                response_sender,
+            } => {
+                let (snapshot_buf, id) = self
+                    .rithmic_sender_api
+                    .request_depth_by_order_snapshot(&symbol, &exchange);
+
+                self.request_handler.register_request(RithmicRequest {
+                    request_id: id,
+                    responder: response_sender,
+                });
+
+                self.rithmic_sender
+                    .send(Message::Binary(snapshot_buf.into()))
+                    .await
+                    .unwrap();
+            }
         }
     }
 }
@@ -477,6 +530,59 @@ impl RithmicTickerPlantHandle {
         let _ = self.sender.send(command).await;
 
         Ok(rx.await.unwrap().unwrap().remove(0))
+    }
+
+    /// Subscribe to order book depth-by-order updates for a specific symbol
+    ///
+    /// # Arguments
+    /// * `symbol` - The trading symbol (e.g., "ESM1")
+    /// * `exchange` - The exchange code (e.g., "CME")
+    ///
+    /// # Returns
+    /// The subscription response or an error message
+    pub async fn subscribe_order_book(
+        &self,
+        symbol: &str,
+        exchange: &str,
+    ) -> Result<RithmicResponse, String> {
+        let (tx, rx) = oneshot::channel::<Result<Vec<RithmicResponse>, String>>();
+
+        let command = TickerPlantCommand::SubscribeOrderBook {
+            symbol: symbol.to_string(),
+            exchange: exchange.to_string(),
+            request_type: request_depth_by_order_updates::Request::Subscribe,
+            response_sender: tx,
+        };
+
+        let _ = self.sender.send(command).await;
+
+        Ok(rx.await.unwrap().unwrap().remove(0))
+    }
+
+    /// Request a snapshot of the order book depth-by-order for a specific symbol
+    ///
+    /// # Arguments
+    /// * `symbol` - The trading symbol (e.g., "ESM1")
+    /// * `exchange` - The exchange code (e.g., "CME")
+    ///
+    /// # Returns
+    /// A vector of responses containing the order book snapshot data or an error message
+    pub async fn request_depth_by_order_snapshot(
+        &self,
+        symbol: &str,
+        exchange: &str,
+    ) -> Result<Vec<RithmicResponse>, String> {
+        let (tx, rx) = oneshot::channel::<Result<Vec<RithmicResponse>, String>>();
+
+        let command = TickerPlantCommand::RequestDepthByOrderSnapshot {
+            symbol: symbol.to_string(),
+            exchange: exchange.to_string(),
+            response_sender: tx,
+        };
+
+        let _ = self.sender.send(command).await;
+
+        rx.await.unwrap()
     }
 }
 
