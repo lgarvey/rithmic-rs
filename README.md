@@ -4,6 +4,7 @@ Unofficial rust client for connecting to Rithmic's R | Protocol API.
 
 [Documentation](https://docs.rs/rithmic-rs/latest/rithmic_rs/) | [Rithmic APIs](https://www.rithmic.com/apis)
 
+_rithmic protocol version: 0.84.0.0_
 
 Not all functionality has been implemented, but this is currently being used to trade live capital through Rithmic.
 
@@ -24,7 +25,7 @@ Or manually add it to your `Cargo.toml` file.
 
 ```
 [dependencies]
-rithmic-rs = "0.3.6"
+rithmic-rs = "0.4.0"
 ```
 
 ## Usage
