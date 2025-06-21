@@ -9,6 +9,8 @@ Not all functionality has been implemented, but this is currently being used to 
 
 Only `order_plant`, `ticker_plant`, `pnl_plant`, `history_plant` are provided. Each plant uses the actor pattern so you'll want to start a plant, and communicate / call commands with it using it's handle. The crate is setup to be used with tokio channels.
 
+The `history_plant` supports loading both historical tick data and time bar data (1-second, 1-minute, 5-minute, daily, and weekly bars).
+
 ## Installation
 
 You can install it from crates.io
@@ -108,6 +110,32 @@ pub async fn stream_live_ticks(
         }
     }
 }
+```
+
+## Examples
+
+The repository includes several examples to help you get started:
+
+**Environment Variables**
+
+Before running examples, copy `.env.blank` to `.env` and fill in your credentials:
+```bash
+cp examples/.env.blank .env
+# Edit .env with your Rithmic credentials
+```
+
+### Basic Connection
+```bash
+cargo run --example connect
+```
+
+### Historical Data
+```bash
+# Load historical tick data
+cargo run --example load_historical_ticks
+
+# Load historical time bars (1-minute, 5-minute, daily)
+cargo run --example load_historical_bars
 ```
 
 ## Contribution

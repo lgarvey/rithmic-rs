@@ -9,13 +9,14 @@ use crate::{
         RequestPnLPositionSnapshot, RequestPnLPositionUpdates, RequestRithmicSystemInfo,
         RequestShowBracketStops, RequestShowBrackets, RequestShowOrders,
         RequestSubscribeForOrderUpdates, RequestSubscribeToBracketUpdates, RequestTickBarReplay,
-        RequestUpdateStopBracketLevel, RequestUpdateTargetBracketLevel,
+        RequestTimeBarReplay, RequestUpdateStopBracketLevel, RequestUpdateTargetBracketLevel,
         request_account_list::UserType,
         request_bracket_order, request_depth_by_order_updates,
         request_login::SysInfraType,
         request_market_data_update::{Request, UpdateBits},
         request_new_order, request_pn_l_position_updates,
         request_tick_bar_replay::{BarSubType, BarType, Direction, TimeOrder},
+        request_time_bar_replay,
     },
 };
 
@@ -504,6 +505,48 @@ impl RithmicSenderApi {
             finish_index: Some(finish_index_sec),
             direction: Some(Direction::First.into()),
             time_order: Some(TimeOrder::Forwards.into()),
+            user_msg: vec![id.clone()],
+            ..Default::default()
+        };
+
+        self.request_to_buf(req, id)
+    }
+
+    /// Request a replay of time bar data
+    ///
+    /// # Arguments
+    ///
+    /// * `exchange` - The exchange of the symbol
+    /// * `symbol` - The symbol to request data for
+    /// * `bar_type` - The type of time bar (SecondBar, MinuteBar, DailyBar, WeeklyBar)
+    /// * `bar_type_period` - The period for the bar type (e.g., 1 for 1-minute bars, 5 for 5-minute bars)
+    /// * `start_index_sec` - unix seconds
+    /// * `finish_index_sec` - unix seconds
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing the request buffer and the message id
+    pub fn request_time_bar_replay(
+        &mut self,
+        exchange: String,
+        symbol: String,
+        bar_type: request_time_bar_replay::BarType,
+        bar_type_period: i32,
+        start_index_sec: i32,
+        finish_index_sec: i32,
+    ) -> (Vec<u8>, String) {
+        let id = self.get_next_message_id();
+
+        let req = RequestTimeBarReplay {
+            template_id: 202,
+            exchange: Some(exchange),
+            symbol: Some(symbol),
+            bar_type: Some(bar_type.into()),
+            bar_type_period: Some(bar_type_period),
+            start_index: Some(start_index_sec),
+            finish_index: Some(finish_index_sec),
+            direction: Some(request_time_bar_replay::Direction::First.into()),
+            time_order: Some(request_time_bar_replay::TimeOrder::Forwards.into()),
             user_msg: vec![id.clone()],
             ..Default::default()
         };

@@ -13,7 +13,7 @@ use crate::{
     },
     connection_info::{self, AccountInfo},
     request_handler::{RithmicRequest, RithmicRequestHandler},
-    rti::request_login::SysInfraType,
+    rti::{request_login::SysInfraType, request_time_bar_replay::BarType},
     ws::{PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
 };
 
@@ -49,11 +49,20 @@ pub enum HistoryPlantCommand {
         start_time_sec: i32,
         symbol: String,
     },
+    LoadTimeBars {
+        bar_type: BarType,
+        bar_type_period: i32,
+        end_time_sec: i32,
+        exchange: String,
+        response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
+        start_time_sec: i32,
+        symbol: String,
+    },
 }
 
 /// The RithmicHistoryPlant provides access to historical market data through the Rithmic API.
 ///
-/// It allows applications to retrieve historical tick data for specific instruments and time ranges
+/// It allows applications to retrieve historical tick data and time bar data for specific instruments and time ranges
 /// from Rithmic's history database.
 ///
 /// # Example
@@ -378,6 +387,34 @@ impl PlantActor for HistoryPlant {
                     .await
                     .unwrap();
             }
+            HistoryPlantCommand::LoadTimeBars {
+                bar_type,
+                bar_type_period,
+                end_time_sec,
+                exchange,
+                response_sender,
+                start_time_sec,
+                symbol,
+            } => {
+                let (time_bar_replay_buf, id) = self.rithmic_sender_api.request_time_bar_replay(
+                    exchange,
+                    symbol,
+                    bar_type,
+                    bar_type_period,
+                    start_time_sec,
+                    end_time_sec,
+                );
+
+                self.request_handler.register_request(RithmicRequest {
+                    request_id: id,
+                    responder: response_sender,
+                });
+
+                self.rithmic_sender
+                    .send(Message::Binary(time_bar_replay_buf.into()))
+                    .await
+                    .unwrap();
+            }
         }
     }
 }
@@ -484,6 +521,44 @@ impl RithmicHistoryPlantHandle {
             start_time_sec,
             end_time_sec,
             response_sender: tx,
+        };
+
+        let _ = self.sender.send(command).await;
+
+        Ok(rx.await.unwrap().unwrap())
+    }
+
+    /// Load historical time bar data for a specific symbol and time range
+    ///
+    /// # Arguments
+    /// * `symbol` - The trading symbol (e.g., "ESM1")
+    /// * `exchange` - The exchange code (e.g., "CME")
+    /// * `bar_type` - The type of time bar (SecondBar, MinuteBar, DailyBar, WeeklyBar)
+    /// * `bar_type_period` - The period for the bar type (e.g., 1 for 1-minute bars, 5 for 5-minute bars)
+    /// * `start_time_sec` - Start time in Unix timestamp (seconds)
+    /// * `end_time_sec` - End time in Unix timestamp (seconds)
+    ///
+    /// # Returns
+    /// The historical time bar data responses or an error message
+    pub async fn load_time_bars(
+        &self,
+        symbol: String,
+        exchange: String,
+        bar_type: BarType,
+        bar_type_period: i32,
+        start_time_sec: i32,
+        end_time_sec: i32,
+    ) -> Result<Vec<RithmicResponse>, String> {
+        let (tx, rx) = oneshot::channel::<Result<Vec<RithmicResponse>, String>>();
+
+        let command = HistoryPlantCommand::LoadTimeBars {
+            bar_type,
+            bar_type_period,
+            end_time_sec,
+            exchange,
+            response_sender: tx,
+            start_time_sec,
+            symbol,
         };
 
         let _ = self.sender.send(command).await;
