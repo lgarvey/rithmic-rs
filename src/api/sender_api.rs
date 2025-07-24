@@ -32,6 +32,8 @@ pub struct RithmicSenderApi {
     env: RithmicConnectionSystem,
     fcm_id: String,
     ib_id: String,
+    app_name: String,
+    app_version: String,
     message_id_counter: u64,
 }
 
@@ -42,6 +44,8 @@ impl RithmicSenderApi {
             env: account_info.env.clone(),
             fcm_id: account_info.fcm_id.clone(),
             ib_id: account_info.ib_id.clone(),
+            app_name: account_info.app_name.clone(),
+            app_version: account_info.app_version.clone(),
             message_id_counter: 0,
         }
     }
@@ -88,8 +92,8 @@ impl RithmicSenderApi {
             template_version: Some("5.30".into()),
             user: Some(user.to_string()),
             password: Some(password.to_string()),
-            app_name: Some("pede:pts".to_string()),
-            app_version: Some("1".into()),
+            app_name: Some(self.app_name.to_string()),
+            app_version: Some(self.app_version.to_string()),
             system_name: Some(system_name.to_string()),
             infra_type: Some(infra_type.into()),
             user_msg: vec![id.clone()],

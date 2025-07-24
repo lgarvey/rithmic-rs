@@ -70,4 +70,6 @@ pub struct AccountInfo {
     pub env: RithmicConnectionSystem,
     pub fcm_id: String,
     pub ib_id: String,
+    pub app_name: String,
+    pub app_version: String,
 }
