@@ -50,7 +50,7 @@ pub async fn connect_with_retry(
         attempt += 1;
 
         match timeout(
-            Duration::from_secs(2),
+            Duration::from_secs(10),
             connect_async_with_config(url, None, true),
         )
         .await
