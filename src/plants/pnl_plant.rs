@@ -123,8 +123,8 @@ impl RithmicPnlPlant {
     /// # Returns
     /// A new `RithmicPnlPlant` instance connected to the Rithmic server
     pub async fn new(account_info: &AccountInfo) -> RithmicPnlPlant {
-        let (req_tx, req_rx) = mpsc::channel::<PnlPlantCommand>(32);
-        let (sub_tx, _sub_rx) = broadcast::channel(1024);
+        let (req_tx, req_rx) = mpsc::channel::<PnlPlantCommand>(64);
+        let (sub_tx, _sub_rx) = broadcast::channel(10_000);
 
         let mut pnl_plant = PnlPlant::new(req_rx, sub_tx.clone(), account_info)
             .await

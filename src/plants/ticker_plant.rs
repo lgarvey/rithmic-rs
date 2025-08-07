@@ -137,8 +137,8 @@ impl RithmicTickerPlant {
     /// # Returns
     /// A new `RithmicTickerPlant` instance connected to the Rithmic server
     pub async fn new(account_info: &AccountInfo) -> RithmicTickerPlant {
-        let (req_tx, req_rx) = mpsc::channel::<TickerPlantCommand>(32);
-        let (sub_tx, _sub_rx) = broadcast::channel(1024);
+        let (req_tx, req_rx) = mpsc::channel::<TickerPlantCommand>(64);
+        let (sub_tx, _sub_rx) = broadcast::channel(10_000);
 
         let mut ticker_plant = TickerPlant::new(req_rx, sub_tx.clone(), account_info)
             .await
@@ -432,8 +432,8 @@ impl PlantActor for TickerPlant {
 
 pub struct RithmicTickerPlantHandle {
     sender: mpsc::Sender<TickerPlantCommand>,
-
     subscription_sender: broadcast::Sender<RithmicResponse>,
+
     /// Receiver for subscription updates
     pub subscription_receiver: broadcast::Receiver<RithmicResponse>,
 }

@@ -177,8 +177,8 @@ impl RithmicOrderPlant {
     /// # Returns
     /// A new `RithmicOrderPlant` instance connected to the Rithmic server
     pub async fn new(account_info: &AccountInfo) -> RithmicOrderPlant {
-        let (req_tx, req_rx) = mpsc::channel::<OrderPlantCommand>(32);
-        let (sub_tx, _sub_rx) = broadcast::channel(1024);
+        let (req_tx, req_rx) = mpsc::channel::<OrderPlantCommand>(64);
+        let (sub_tx, _sub_rx) = broadcast::channel(10_000);
 
         let mut order_plant = OrderPlant::new(req_rx, sub_tx.clone(), account_info)
             .await
