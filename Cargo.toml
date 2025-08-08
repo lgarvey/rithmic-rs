@@ -7,7 +7,7 @@ edition = "2024"
 repository = "https://github.com/pbeets/rithmic-rs"
 documentation = "https://docs.rs/rithmic-rs"
 readme = "README.md"
-keywords = ["trading", "rithmic", "algotrading", "algorithmic-trading", "automated trading"]
+keywords = ["trading", "rithmic", "algotrading", "algorithmic-trading", "automated-trading"]
 categories = ["api-bindings", "finance"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
