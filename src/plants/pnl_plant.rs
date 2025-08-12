@@ -178,7 +178,7 @@ impl PnlPlant {
     ) -> Result<PnlPlant, Error> {
         let config = connection_info::get_config(&account_info.env);
 
-        let ws_stream = connect_with_retry(&config.url, 15)
+        let ws_stream = connect_with_retry(&config.url, &config.beta_url, 15)
             .await
             .expect("failed to connect to pnl plant");
 

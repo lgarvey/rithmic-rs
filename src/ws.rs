@@ -1,13 +1,27 @@
 use async_trait::async_trait;
 use std::time::Duration;
-use tokio::time::{Instant, Interval, interval_at, sleep, timeout};
-use tracing::{Level, event};
+use tracing::{error, info, warn};
+
+use tokio::{
+    net::TcpStream,
+    time::{Instant, Interval, interval_at, sleep, timeout},
+};
 
 use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream, connect_async_with_config,
     tungstenite::{Error, Message},
 };
 
+/// Number of seconds between heartbeats sent to the server.
+const HEARTBEAT_SECS: u64 = 60;
+
+/// Connection attempt timeout in seconds.
+const CONNECT_TIMEOUT_SECS: u64 = 2;
+
+/// Base backoff in milliseconds multiplied by the attempt number.
+const BACKOFF_MS_BASE: u64 = 500;
+
+/// A generic stream over the Rithmic connection exposing a handle for external control.
 pub trait RithmicStream {
     type Handle;
 
@@ -25,7 +39,7 @@ pub trait PlantActor {
 }
 
 pub fn get_heartbeat_interval() -> Interval {
-    let heartbeat_interval = Duration::from_secs(60);
+    let heartbeat_interval = Duration::from_secs(HEARTBEAT_SECS);
     let start_offset = Instant::now() + heartbeat_interval;
 
     interval_at(start_offset, heartbeat_interval)
@@ -34,54 +48,53 @@ pub fn get_heartbeat_interval() -> Interval {
 /// Sometimes the connection gets stuck and retrying seems to help.
 ///
 /// Arguments:
-/// * `url`: The URL to connect to.
-/// * `max_attempts`: The number of attempts to connect.
+/// * `primary_url`: Primary URL to connect to first
+/// * `secondary_url`: Beta URL to alternate with after the first failure
+/// * `max_attempts`: Total number of attempts to connect
 ///
 /// Returns:
 /// * `Ok`: A WebSocketStream if the connection is successful.
 /// * `Err`: An error if the connection fails after the specified number of attempts.
 pub async fn connect_with_retry(
-    url: &str,
+    primary_url: &str,
+    secondary_url: &str,
     max_attempts: u32,
-) -> Result<WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>, Error> {
-    let mut attempt = 0;
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, Error> {
+    for attempt in 1..=max_attempts {
+        let selected_url = if attempt == 1 {
+            primary_url
+        } else if attempt % 2 == 0 {
+            secondary_url
+        } else {
+            primary_url
+        };
 
-    loop {
-        attempt += 1;
+        info!("Attempt {}: connecting to {}", attempt, selected_url);
 
         match timeout(
-            Duration::from_secs(2),
-            connect_async_with_config(url, None, true),
+            Duration::from_secs(CONNECT_TIMEOUT_SECS),
+            connect_async_with_config(selected_url, None, true),
         )
         .await
         {
-            Ok(Ok((ws_stream, _))) => {
-                return Ok(ws_stream);
-            }
-            Ok(Err(e)) => {
-                event!(Level::WARN, "connect_async failed: {:?}, retrying...", e);
-            }
-            Err(_) => {
-                event!(Level::WARN, "connect_async timed out, retrying...");
-            }
+            Ok(Ok((ws_stream, _))) => return Ok(ws_stream),
+            Ok(Err(e)) => warn!("connect_async failed for {}: {:?}", selected_url, e),
+            Err(e) => warn!("connect_async to {} timed out: {:?}", selected_url, e),
         }
 
-        if attempt >= max_attempts {
-            event!(Level::ERROR, "max connection attempts reached");
+        if attempt < max_attempts {
+            let backoff_ms: u64 = BACKOFF_MS_BASE * attempt as u64;
 
-            return Err(Error::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "max connection attempts reached",
-            )));
+            info!("Backing off for {}ms before retry", backoff_ms,);
+
+            sleep(Duration::from_millis(backoff_ms)).await;
         }
-
-        sleep(Duration::from_millis(500)).await;
-
-        event!(
-            Level::INFO,
-            "Attempting to connect to {} - attempt {}",
-            url,
-            attempt
-        );
     }
+
+    error!("max connection attempts reached");
+
+    Err(Error::Io(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "max connection attempts reached",
+    )))
 }
