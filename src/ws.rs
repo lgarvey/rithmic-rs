@@ -13,7 +13,7 @@ use tokio_tungstenite::{
 };
 
 /// Number of seconds between heartbeats sent to the server.
-const HEARTBEAT_SECS: u64 = 60;
+pub const HEARTBEAT_SECS: u64 = 60;
 
 /// Connection attempt timeout in seconds.
 const CONNECT_TIMEOUT_SECS: u64 = 2;
@@ -38,8 +38,9 @@ pub trait PlantActor {
     -> Result<bool, ()>;
 }
 
-pub fn get_heartbeat_interval() -> Interval {
-    let heartbeat_interval = Duration::from_secs(HEARTBEAT_SECS);
+pub fn get_heartbeat_interval(override_secs: Option<u64>) -> Interval {
+    let secs = override_secs.unwrap_or(HEARTBEAT_SECS);
+    let heartbeat_interval = Duration::from_secs(secs);
     let start_offset = Instant::now() + heartbeat_interval;
 
     interval_at(start_offset, heartbeat_interval)

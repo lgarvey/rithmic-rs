@@ -14,8 +14,8 @@ use crate::{
     },
     connection_info::{self, AccountInfo},
     request_handler::{RithmicRequest, RithmicRequestHandler},
-    rti::request_login::SysInfraType,
-    ws::{PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
+    rti::{messages::RithmicMessage, request_login::SysInfraType},
+    ws::{HEARTBEAT_SECS, PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
 };
 
 use futures_util::{
@@ -43,6 +43,9 @@ pub enum OrderPlantCommand {
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
     SendHeartbeat {},
+    UpdateHeartbeat {
+        seconds: u64,
+    },
     AccountList {
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
@@ -242,7 +245,7 @@ impl OrderPlant {
             source: "order_plant".to_string(),
         };
 
-        let interval = get_heartbeat_interval();
+        let interval = get_heartbeat_interval(None);
 
         Ok(OrderPlant {
             config,
@@ -317,7 +320,17 @@ impl PlantActor for OrderPlant {
                 }
             },
             Err(Error::ConnectionClosed) => {
-                event!(Level::INFO, "order_plant: Connection closed");
+                event!(Level::ERROR, "order_plant: Connection closed");
+
+                stop = true;
+            }
+            Err(Error::Protocol(
+                tokio_tungstenite::tungstenite::error::ProtocolError::ResetWithoutClosingHandshake,
+            )) => {
+                event!(
+                    Level::ERROR,
+                    "order_plant: connection reset without closing handshake"
+                );
 
                 stop = true;
             }
@@ -394,6 +407,9 @@ impl PlantActor for OrderPlant {
                     .rithmic_sender
                     .send(Message::Binary(heartbeat_buf.into()))
                     .await;
+            }
+            OrderPlantCommand::UpdateHeartbeat { seconds } => {
+                self.interval = get_heartbeat_interval(Some(seconds));
             }
             OrderPlantCommand::AccountList { response_sender } => {
                 let (req_buf, id) = self.rithmic_sender_api.request_account_list();
@@ -591,6 +607,17 @@ impl RithmicOrderPlantHandle {
 
         if response.error.is_none() {
             let _ = self.sender.send(OrderPlantCommand::SetLogin).await;
+
+            if let RithmicMessage::ResponseLogin(resp) = &response.message {
+                if let Some(hb) = resp.heartbeat_interval {
+                    let secs = hb.max(HEARTBEAT_SECS as f64) as u64;
+                    self.update_heartbeat(secs).await;
+                }
+
+                if let Some(session_id) = &resp.unique_user_id {
+                    event!(Level::INFO, "order_plant: session id: {}", session_id);
+                }
+            }
 
             event!(Level::INFO, "order_plant: logged in");
 
@@ -793,5 +820,11 @@ impl RithmicOrderPlantHandle {
         let _ = self.sender.send(command).await;
 
         Ok(rx.await.unwrap().unwrap().remove(0))
+    }
+
+    async fn update_heartbeat(&self, seconds: u64) {
+        let command = OrderPlantCommand::UpdateHeartbeat { seconds };
+
+        let _ = self.sender.send(command).await;
     }
 }

@@ -8,8 +8,8 @@ use crate::{
     },
     connection_info::{self, AccountInfo},
     request_handler::{RithmicRequest, RithmicRequestHandler},
-    rti::{request_login::SysInfraType, request_pn_l_position_updates},
-    ws::{PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
+    rti::{messages::RithmicMessage, request_login::SysInfraType, request_pn_l_position_updates},
+    ws::{HEARTBEAT_SECS, PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
 };
 
 use futures_util::{
@@ -44,6 +44,9 @@ pub enum PnlPlantCommand {
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
     SendHeartbeat {},
+    UpdateHeartbeat {
+        seconds: u64,
+    },
     SubscribePnlUpdates {
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
@@ -189,7 +192,7 @@ impl PnlPlant {
             source: "pnl_plant".to_string(),
         };
 
-        let interval = get_heartbeat_interval();
+        let interval = get_heartbeat_interval(None);
 
         Ok(PnlPlant {
             config,
@@ -343,6 +346,9 @@ impl PlantActor for PnlPlant {
                     .send(Message::Binary(heartbeat_buf.into()))
                     .await;
             }
+            PnlPlantCommand::UpdateHeartbeat { seconds } => {
+                self.interval = get_heartbeat_interval(Some(seconds));
+            }
             PnlPlantCommand::SubscribePnlUpdates { response_sender } => {
                 let (subscribe_buf, id) = self.rithmic_sender_api.request_pnl_position_updates(
                     request_pn_l_position_updates::Request::Subscribe,
@@ -418,6 +424,17 @@ impl RithmicPnlPlantHandle {
         if response.error.is_none() {
             let _ = self.sender.send(PnlPlantCommand::SetLogin).await;
 
+            if let RithmicMessage::ResponseLogin(resp) = &response.message {
+                if let Some(hb) = resp.heartbeat_interval {
+                    let secs = hb.max(HEARTBEAT_SECS as f64) as u64;
+                    self.update_heartbeat(secs).await;
+                }
+
+                if let Some(session_id) = &resp.unique_user_id {
+                    event!(Level::INFO, "pnl_plant: session id: {}", session_id);
+                }
+            }
+
             event!(Level::INFO, "pnl_plant: logged in");
 
             Ok(response)
@@ -426,6 +443,12 @@ impl RithmicPnlPlantHandle {
 
             Err(response.error.unwrap())
         }
+    }
+
+    async fn update_heartbeat(&self, seconds: u64) {
+        let command = PnlPlantCommand::UpdateHeartbeat { seconds };
+
+        let _ = self.sender.send(command).await;
     }
 
     /// Disconnect from the Rithmic PnL plant

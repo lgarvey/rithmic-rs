@@ -13,8 +13,10 @@ use crate::{
     },
     connection_info::{self, AccountInfo},
     request_handler::{RithmicRequest, RithmicRequestHandler},
-    rti::{request_login::SysInfraType, request_time_bar_replay::BarType},
-    ws::{PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
+    rti::{
+        messages::RithmicMessage, request_login::SysInfraType, request_time_bar_replay::BarType,
+    },
+    ws::{HEARTBEAT_SECS, PlantActor, RithmicStream, connect_with_retry, get_heartbeat_interval},
 };
 
 use futures_util::{
@@ -42,6 +44,9 @@ pub enum HistoryPlantCommand {
         response_sender: oneshot::Sender<Result<Vec<RithmicResponse>, String>>,
     },
     SendHeartbeat {},
+    UpdateHeartbeat {
+        seconds: u64,
+    },
     LoadTicks {
         end_time_sec: i32,
         exchange: String,
@@ -197,7 +202,7 @@ impl HistoryPlant {
             source: "history_plant".to_string(),
         };
 
-        let interval = get_heartbeat_interval();
+        let interval = get_heartbeat_interval(None);
 
         Ok(HistoryPlant {
             config,
@@ -363,6 +368,9 @@ impl PlantActor for HistoryPlant {
                     .send(Message::Binary(heartbeat_bf.into()))
                     .await;
             }
+            HistoryPlantCommand::UpdateHeartbeat { seconds } => {
+                self.interval = get_heartbeat_interval(Some(seconds));
+            }
             HistoryPlantCommand::LoadTicks {
                 exchange,
                 symbol,
@@ -464,6 +472,17 @@ impl RithmicHistoryPlantHandle {
         if response.error.is_none() {
             let _ = self.sender.send(HistoryPlantCommand::SetLogin).await;
 
+            if let RithmicMessage::ResponseLogin(resp) = &response.message {
+                if let Some(hb) = resp.heartbeat_interval {
+                    let secs = hb.max(HEARTBEAT_SECS as f64) as u64;
+                    self.update_heartbeat(secs).await;
+                }
+
+                if let Some(session_id) = &resp.unique_user_id {
+                    event!(Level::INFO, "history_plant: session id: {}", session_id);
+                }
+            }
+
             event!(Level::INFO, "history_plant: logged in");
 
             Ok(response)
@@ -476,6 +495,12 @@ impl RithmicHistoryPlantHandle {
 
             Err(response.error.unwrap())
         }
+    }
+
+    async fn update_heartbeat(&self, seconds: u64) {
+        let command = HistoryPlantCommand::UpdateHeartbeat { seconds };
+
+        let _ = self.sender.send(command).await;
     }
 
     /// Disconnect from the Rithmic History plant
