@@ -68,7 +68,7 @@ pub fn get_config(env: &RithmicConnectionSystem) -> RithmicConnectionInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct AccountInfo {
     pub account_id: String,
     pub env: RithmicConnectionSystem,
